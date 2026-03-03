@@ -8,29 +8,33 @@ import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter; // needed for the tab magic
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
-public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
+// added TabCompleter here so the server knows we have suggestions
+public class Reumsg extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
 
-    // mini message instance
     private final MiniMessage mm = MiniMessage.miniMessage();
 
     @Override
     public void onEnable() {
-        saveDefaultConfig(); // gotta have that config
-
+        saveDefaultConfig();
         getServer().getPluginManager().registerEvents(this, this);
 
-        // registering the command. if this is null the plugin is toast anyway lol
         if (getCommand("reumsg") != null) {
             getCommand("reumsg").setExecutor(this);
+            getCommand("reumsg").setTabCompleter(this); // don't forget to register the completer!
         }
 
         getLogger().info("Reumsg system loaded up. Let's get it.");
@@ -38,20 +42,16 @@ public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
-        e.joinMessage(null); // begone vanilla message
+        e.joinMessage(null);
         Player p = e.getPlayer();
 
-        // getting ID 1 as default join msg.
-        // i should probably make this configurable later lol
         String txt = getConfig().getString("messages.1.text", "<white>Welcome %player%!");
         boolean bld = getConfig().getBoolean("messages.1.bold", false);
         boolean itl = getConfig().getBoolean("messages.1.italic", false);
 
-        // sandwich the tags in if they are enabled
         if (bld) txt = "<bold>" + txt;
         if (itl) txt = "<italic>" + txt;
 
-        // ping everyone. maybe i'll make this a toggle later if it gets annoying.
         for (Player all : Bukkit.getOnlinePlayers()) {
             all.playSound(all.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.5f, 1f);
         }
@@ -66,11 +66,9 @@ public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
             return true;
         }
 
-        // handle the ID system: /reumsg id=1 <message>
         if (args.length >= 2 && args[0].contains("id=")) {
-            String id = args[0].split("=")[1]; // just split it, cleaner than replace
+            String id = args[0].split("=")[1];
 
-            // check for style toggle: /reumsg id=1 bold true
             if (args.length == 3 && (args[1].equalsIgnoreCase("bold") || args[1].equalsIgnoreCase("italic"))) {
                 String key = args[1].toLowerCase();
                 boolean toggle = Boolean.parseBoolean(args[2]);
@@ -81,7 +79,6 @@ public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
                 return true;
             }
 
-            // just setting the raw text
             String finalMsg = String.join(" ", Arrays.copyOfRange(args, 1, args.length));
             getConfig().set("messages." + id + ".text", finalMsg);
             saveConfig();
@@ -90,18 +87,17 @@ public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
             return true;
         }
 
-        // quick reload command cause
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             reloadConfig();
             p.sendMessage(mm.deserialize("<green>Reumsg config reloaded!"));
             return true;
         }
 
-        // the help menu
+        // updated help menu with your <id> and <true/false> placeholders
         p.sendMessage(mm.deserialize("<newline><gradient:aqua:blue><bold>--- REUMSG EDIT MODE ---</bold></gradient>"));
-        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=1 <msg> <dark_gray>- set text"));
-        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=1 bold true/false <dark_gray>- toggle bold"));
-        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=1 italic true/false <dark_gray>- toggle italic"));
+        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=<id> <msg> <dark_gray>- set text"));
+        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=<id> bold <true/false> <dark_gray>- toggle bold"));
+        p.sendMessage(mm.deserialize("<gray>» <white>/reumsg id=<id> italic <true/false> <dark_gray>- toggle italic"));
         p.sendMessage(mm.deserialize("<gray>» <white>/reumsg reload <dark_gray>- refresh config"));
         p.sendMessage(mm.deserialize("<newline><white>Tip: ID 1 is the join message."));
         p.sendMessage(mm.deserialize("<gradient:aqua:blue><bold>------------------------</bold></gradient><newline>"));
@@ -109,11 +105,32 @@ public class Reumsg extends JavaPlugin implements Listener, CommandExecutor {
         return true;
     }
 
-    // helper for the messy stuff
+    // This is the "TAB" magic part.
+    @Override
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
+        List<String> completions = new ArrayList<>();
+
+        if (args.length == 1) {
+            completions.add("id=1");
+            completions.add("reload");
+        } else if (args.length == 2 && args[0].startsWith("id=")) {
+            completions.add("bold");
+            completions.add("italic");
+            completions.add("<message>");
+        } else if (args.length == 3 && (args[1].equalsIgnoreCase("bold") || args[1].equalsIgnoreCase("italic"))) {
+            completions.add("true");
+            completions.add("false");
+        }
+
+        // basically just filters the list so if you type "b" it only shows "bold"
+        return completions.stream()
+                .filter(s -> s.toLowerCase().startsWith(args[args.length - 1].toLowerCase()))
+                .collect(Collectors.toList());
+    }
+
     private Component format(Player p, String raw) {
         String out = raw.replace("%player%", p.getName());
 
-        // try to use papi if the server has it. if not, whatever.
         if (Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             out = PlaceholderAPI.setPlaceholders(p, out);
         }
