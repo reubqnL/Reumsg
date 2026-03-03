@@ -1,0 +1,7 @@
+#This is the config file, it will store your custom messages that you create ingame
+#Change the message here if you don't wanna do it in game chat
+messages:
+  "1":
+    text: "<gradient:aqua:blue>Welcome %player%!</gradient>"
+    bold: true
+    italic: false

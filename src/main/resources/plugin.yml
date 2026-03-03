@@ -1,0 +1,7 @@
+name: Reumsg
+version: 1.0
+main: me.reumsg.Reumsg
+api-version: '1.21'
+commands:
+  reumsg:
+    description: Main command for Reumsg help and setup.
